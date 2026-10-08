@@ -1,0 +1,126 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Junction A — Traffic</title>
+  <style>
+    body { background:#0d1117; color:#e6edf3; font-family: system-ui; margin: 20px; }
+    h1 { font-size: 20px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .card { background:#161b22; padding:14px; border-radius:8px; border:1px solid #30363d; }
+    .sig { display:inline-block; padding:6px 12px; margin:4px; border-radius:6px; font-weight:bold; color:#000; }
+    .RED { background:#f85149; } .YELLOW { background:#e3b341; } .GREEN { background:#3fb950; }
+    pre { background:#010409; padding:10px; border-radius:6px; font-size:12px; max-height:300px; overflow:auto; }
+    button { background:#238636; border:0; padding:6px 10px; color:#fff; border-radius:6px; cursor:pointer; margin:2px; }
+    input, select { background:#0d1117; color:#e6edf3; border:1px solid #30363d; padding:4px; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <h1>🚦 Junction A — Live Dashboard</h1>
+  <div class="grid">
+    <div class="card">
+      <h3>State</h3>
+      <div id="summary">Loading…</div>
+      <h3>Signals (desired)</h3>
+      <div id="signals"></div>
+    </div>
+    <div class="card">
+      <h3>Manual Control</h3>
+      <select id="mDir"><option>NORTH</option><option>SOUTH</option><option>EAST</option><option>WEST</option></select>
+      <button onclick="manual()">MANUAL GREEN</button>
+      <button onclick="auto()">AUTO</button>
+      <h3>Controller</h3>
+      <button onclick="ctrl('ACK')">ACK</button>
+      <button onclick="ctrl('OFFLINE')">OFFLINE</button>
+    </div>
+    <div class="card">
+      <h3>Simulate Vehicle</h3>
+      <select id="vDir"><option>NORTH</option><option>SOUTH</option><option>EAST</option><option>WEST</option></select>
+      <select id="vType">
+        <option>FORKLIFT</option><option>TRUCK</option>
+        <option>EMPLOYEE_VEHICLE</option><option>EMERGENCY</option>
+      </select>
+      <input id="vId" value="VH-1" size="6"/>
+      <button onclick="arrive()">Arrive</button>
+      <button onclick="clearV()">Clear</button>
+    </div>
+    <div class="card">
+      <h3>History</h3>
+      <pre id="hist"></pre>
+    </div>
+  </div>
+  <script>
+    const J = 'A';
+    let seq = 1000;
+    async function refresh() {
+      try {
+        const s = await fetch(`/api/junctions/${J}/status`).then(r => r.json());
+        document.getElementById('summary').innerHTML = `
+          Mode: <b>${s.mode}</b> · Phase: <b>${s.phase}</b> · Stage: <b>${s.stage}</b><br/>
+          Controller: <b>${s.controller_status}</b><br/>
+          Queues: ${JSON.stringify(s.queues)}<br/>
+          ${s.emergency ? '<span style="color:#f85149">🚨 EMERGENCY: '+JSON.stringify(s.emergency)+'</span>' : ''}
+        `;
+        const sig = s.desired_signals;
+        document.getElementById('signals').innerHTML =
+          Object.entries(sig).map(([d, v]) => `<span class="sig ${v}">${d}: ${v}</span>`).join('');
+        const h = await fetch(`/api/junctions/${J}/history`).then(r => r.json());
+        document.getElementById('hist').textContent = h.slice(0, 15).map(x =>
+          `${new Date(x.timestamp).toLocaleTimeString()}  ${x.event_type}`).join('\\n');
+      } catch (e) {
+        document.getElementById('summary').textContent = '⚠️ Backend unreachable';
+      }
+    }
+    async function arrive() {
+      await fetch('/api/sensor-events', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event_id: 'evt-' + (seq++), junction_id: J,
+          direction: document.getElementById('vDir').value,
+          event_type: 'VEHICLE_ARRIVED',
+          vehicle_id: document.getElementById('vId').value,
+          vehicle_type: document.getElementById('vType').value,
+          sequence_no: seq,
+        })
+      });
+      refresh();
+    }
+    async function clearV() {
+      await fetch('/api/sensor-events', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event_id: 'evt-' + (seq++), junction_id: J,
+          direction: document.getElementById('vDir').value,
+          event_type: 'VEHICLE_CLEARED',
+          vehicle_id: document.getElementById('vId').value,
+          sequence_no: seq,
+        })
+      });
+      refresh();
+    }
+    async function manual() {
+      await fetch(`/api/junctions/${J}/commands`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: 'MANUAL_GREEN_REQUEST', direction: document.getElementById('mDir').value })
+      });
+      refresh();
+    }
+    async function auto() {
+      await fetch(`/api/junctions/${J}/commands`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: 'RETURN_TO_AUTOMATIC' })
+      });
+      refresh();
+    }
+    async function ctrl(status) {
+      await fetch('/api/controller-events', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command_id: 'cmd-x', junction_id: J, status, actual_state: 'GREEN' })
+      });
+      refresh();
+    }
+    refresh();
+    setInterval(refresh, 1500);
+  </script>
+</body>
+</html>
