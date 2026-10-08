@@ -42,38 +42,48 @@ An **event-driven traffic-control system** for internal roads inside a garment m
 | **Controller simulation** | REST-based ACK / OFFLINE / NACK events |
 | **Audit log** | Full event history per junction |
 | **Dashboard** | Live polling UI with simulation form |
-────────────────────────────────────────────┐
-│ Presentation Layer │
-│ templates/dashboard.html (HTML + JS) │
-│ → Polls /status every 1.5s │
+
+
+
+## 🏗️ Architecture
+
+The system follows a **layered architecture**. The core domain logic has **zero dependencies** on Django, HTTP, or the database — it can be unit-tested in isolation.
+
+```
+┌─────────────────────────────────────────────┐
+│  Presentation Layer                         │
+│  templates/dashboard.html (HTML + JS)       │
+│  → Polls /status every 1.5s                 │
 └──────────────────────┬──────────────────────┘
-│ HTTP/JSON
+                       │ HTTP/JSON
 ┌──────────────────────▼──────────────────────┐
-│ API Layer │
-│ traffic/views.py + serializers.py │
-│ → DRF endpoints, validation, HTTP codes │
+│  API Layer                                  │
+│  traffic/views.py + serializers.py          │
+│  → DRF endpoints, validation, HTTP codes    │
 └──────────────────────┬──────────────────────┘
-│ function calls
+                       │ function calls
 ┌──────────────────────▼──────────────────────┐
-│ Registry (Persistence Bridge) │
-│ traffic/registry.py │
-│ → Engine ⇄ DB, threading.RLock per junction│
+│  Registry (Persistence Bridge)              │
+│  traffic/registry.py                        │
+│  → Engine ⇄ DB, threading.RLock per junction│
 └──────────────────────┬──────────────────────┘
-│ Python objects
+                       │ Python objects
 ┌──────────────────────▼──────────────────────┐
-│ Domain Layer (PURE) │
-│ traffic/engine.py │
-│ → State machine, scoring, safety invariants│
-│ → NO Django, NO HTTP, NO DB │
+│  Domain Layer (PURE)                        │
+│  traffic/engine.py                          │
+│  → State machine, scoring, safety invariants│
+│  → NO Django, NO HTTP, NO DB                │
 └─────────────────────────────────────────────┘
 
 Background: traffic/scheduler.py
-→ Daemon thread, ticks every 500ms
-→ Calls engine.tick(), persists on transition
-
-text
+  → Daemon thread, ticks every 500ms
+  → Calls engine.tick(), persists on transition
+```
 
 **Key insight:** Because `engine.py` doesn't import Django, you can test the entire traffic-control logic without spinning up HTTP, DB, or frontend. This satisfies the spec's requirement: *"The domain engine should not contain MQTT-specific or HTTP-specific traffic-control rules."*
+
+
+
 
 ---
 
@@ -426,8 +436,9 @@ The candidate understands, can explain, and can modify every part of the submitt
 📜 License
 Submitted for assessment purposes. No production license applied.
 
+The system follows a **layered architecture**. The core domain logic has **zero dependencies** on Django, HTTP, or the database — it can be unit-tested in isolation.
+
 👤 Author
 Rahul — Backend Developer Intern Candidate
 GitHub: @Rahul4h
 
-The system follows a **layered architecture**. The core domain logic has **zero dependencies** on Django, HTTP, or the database — it can be unit-tested in isolation.
